@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Semantic Patent Search Engine</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header>
+        <h1>Semantic Patent Search Engine</h1>
+        <p>Enter a patent ID (e.g., US10945783B2) to find similar prior art.</p>
+      </header>
+
+      <section class="search-card">
+        <form id="patent-form">
+          <label for="patent-id">Patent Document ID</label>
+          <div class="input-row">
+            <input
+              type="text"
+              id="patent-id"
+              name="patent_id"
+              placeholder="US10945783B2"
+              required
+            />
+            <button type="submit">Search</button>
+          </div>
+          <label for="keyword-filter">Title/Abstract Keyword Filter (single keyword or phrase)</label>
+          <input
+            type="text"
+            id="keyword-filter"
+            name="keyword_filter"
+            placeholder='e.g. "sensor fusion"'
+          />
+        </form>
+        <p class="helper">
+          The backend will scrape the live patent page, embed the combined text,
+          and compare it to the local FAISS index.
+        </p>
+      </section>
+
+      <section class="scraped-card hidden" id="scraped-card">
+        <h2>Scraped Patent Details</h2>
+        <div class="scraped-meta">
+          <p><strong>Patent ID:</strong> <span id="scraped-patent-id">—</span></p>
+          <p><strong>Title:</strong> <span id="scraped-title">—</span></p>
+        </div>
+        <div class="scraped-abstract">
+          <h3>Abstract</h3>
+          <p id="scraped-abstract">Submit a patent to view its abstract.</p>
+        </div>
+      </section>
+
+      <section class="results-card">
+        <h2>Top Matches</h2>
+        <p id="results-summary" class="results-summary"></p>
+        <table id="results-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Patent&nbsp;ID</th>
+              <th>Most Similar Claim</th>
+              <th>Similarity</th>
+              <th>Closest Query Claim</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="placeholder">
+              <td colspan="5">Submit a patent ID to view results.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+
+    <script>
+      const form = document.getElementById("patent-form");
+      const tableBody = document.querySelector("#results-table tbody");
+      const summary = document.getElementById("results-summary");
+      const scrapedCard = document.getElementById("scraped-card");
+      const scrapedPatentId = document.getElementById("scraped-patent-id");
+      const scrapedTitle = document.getElementById("scraped-title");
+      const scrapedAbstract = document.getElementById("scraped-abstract");
+
+      form?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const formData = new FormData(form);
+        const patentId = formData.get("patent_id");
+        if (!patentId) return;
+        const keywordFilter = formData.get("keyword_filter");
+
+        tableBody.innerHTML =
+          '<tr class="placeholder"><td colspan="5">Searching…</td></tr>';
+        if (summary) summary.textContent = "";
+        toggleScrapedVisibility(false);
+
+        try {
+          const response = await fetch("/api/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              patent_id: patentId,
+              keyword_filter: keywordFilter || null,
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error(await response.text());
+          }
+
+          const payload = await response.json();
+          renderScrapedDetails(payload);
+          renderResults(payload.results || []);
+          if (summary) {
+            const count = payload.results?.length || 0;
+            summary.textContent = `Showing ${count} semantic matches (max 10).`;
+          }
+        } catch (err) {
+          tableBody.innerHTML = `<tr class="placeholder"><td colspan="5">Error: ${
+            err?.message || err
+          }</td></tr>`;
+          if (summary) summary.textContent = "";
+          toggleScrapedVisibility(false);
+        }
+      });
+
+      function renderScrapedDetails(payload) {
+        if (!scrapedCard) return;
+        if (!payload) {
+          toggleScrapedVisibility(false);
+          return;
+        }
+
+        toggleScrapedVisibility(true);
+        scrapedPatentId.textContent = payload.patent_id || "—";
+        scrapedTitle.textContent = payload.scraped_title || "Untitled Patent";
+        scrapedAbstract.textContent =
+          payload.scraped_abstract || "No abstract available.";
+      }
+
+      function toggleScrapedVisibility(show) {
+        if (!scrapedCard) return;
+        scrapedCard.classList.toggle("hidden", !show);
+      }
+
+      function renderResults(results) {
+        if (!results.length) {
+          tableBody.innerHTML =
+            '<tr class="placeholder"><td colspan="5">No matches found.</td></tr>';
+          return;
+        }
+
+        tableBody.innerHTML = "";
+        results.forEach((item, index) => {
+          const row = document.createElement("tr");
+          appendCell(row, index + 1);
+          appendCell(row, item.doc_number || "—");
+          appendCell(row, item.source_text || "—");
+          appendCell(row, formatScore(item.score));
+          appendCell(row, item.query_claim_text || "—");
+          tableBody.appendChild(row);
+        });
+      }
+
+      function appendCell(row, value) {
+        const cell = document.createElement("td");
+        cell.textContent = typeof value === "string" ? value : `${value ?? "—"}`;
+        row.appendChild(cell);
+      }
+
+      function formatScore(score) {
+        if (typeof score !== "number" || Number.isNaN(score)) {
+          return "—";
+        }
+        return score.toFixed(3);
+      }
+    </script>
+  </body>
+</html>

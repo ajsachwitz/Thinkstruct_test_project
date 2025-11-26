@@ -7,10 +7,7 @@ This project implements a high-precision, two-stage semantic search engine for U
 ## 1. Problem Statement
 
 **Goal**
-Given an external patent document ID as a query, efficiently identify and rank the top 10 most relevant prior-art patents from a local corpus.
-
-**Industry challenge solved**
-Accurate claim mapping—identifying conceptually relevant prior art using legally significant claim text rather than simple keyword overlap.
+Given an external patent document ID as a query, efficiently identify and rank the top 10 most relevant patents from a local directory of patents.
 
 ---
 
@@ -26,6 +23,7 @@ The system evolves from a naive whole-document embedding approach to a high-prec
 - Query by scraping the patent, concatenating the sections, embedding once, and searching nearest neighbors.
 
 **Limitation:** A single vector for a 10k–20k word patent causes semantic dilution. Fine-grained meaning in individual claims is lost.
+### Part 2: Enhancements
 
 ### Enhancement 1: Two-Stage Semantic Search
 
